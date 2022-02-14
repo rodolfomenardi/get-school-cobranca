@@ -1,0 +1,31 @@
+package online.getschool.cobranca.integracao.banco.inter.dto.resposta
+
+data class RespostaBoletoInter(
+    val nomeBeneficiario: String,
+    val cnpjCpfBeneficiario: String,
+    val tipoPessoaBeneficiario: String,
+    val dataHoraSituacao: String,
+    val codigoBarras: String,
+    val linhaDigitavel: String,
+    val dataVencimento: String,
+    val dataEmissao: String,
+    val seuNumero: String,
+    val valorNominal: Float,
+    val nomePagador: String,
+    val emailPagador: String,
+    val dddPagador: String,
+    val telefonePagador: String,
+    val tipoPessoaPagador: String,
+    val cnpjCpfPagador: String,
+    val codigoEspecie: String,
+    val dataLimitePagamento: String,
+    val valorAbatimento: Float,
+    val situacaoPagamento: String,
+    val situacao: String,
+    val desconto1: RespostaDescontoInter,
+    val desconto2: RespostaDescontoInter,
+    val desconto3: RespostaDescontoInter,
+    val multa: RespostaMultaInter,
+    val mora: RespostaMoraInter,
+    val mensagem: RespostaMensagemInter
+)

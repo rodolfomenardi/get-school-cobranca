@@ -3,20 +3,26 @@ package online.getschool.cobranca.integracao.banco.inter.service
 import online.getschool.cobranca.dominio.dto.boleto.*
 import online.getschool.cobranca.integracao.banco.BoletoService
 import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaBoletoInter
-import org.slf4j.Logger
+import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaDescontoInter
+import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaMensagemInter
+import online.getschool.cobranca.services.RestClientService
 import org.slf4j.LoggerFactory
-import org.springframework.boot.web.client.RestTemplateBuilder
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
-import org.springframework.util.MultiValueMap
-import org.springframework.util.StringUtils
+import org.springframework.stereotype.Service
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-class BoletoInterService : BoletoService {
+@Service
+class BoletoInterService(
+    @Value("\${banco.inter.url.rest}") private val urlBase: String,
+    @Value("\${banco.inter.numero.conta}") private val numeroConta: String,
+    private val restClientService: RestClientService
+) : BoletoService {
     companion object {
-        private val logger: Logger = LoggerFactory.getLogger(BoletoInterService::class.java)
+        private val logger = LoggerFactory.getLogger(BoletoInterService::class.java)
     }
 
     override fun emitir(boleto: Boleto): Boleto {
@@ -29,122 +35,153 @@ class BoletoInterService : BoletoService {
 
     override fun recuperarBoleto(boletoId: String): Boleto {
         logger.debug("Recuperando boletos do banco inter")
+        val httpEntity = this.recuperarHttpEntity()
 
-        val headers = HttpHeaders()
-        headers.add("x-inter-conta-corrente", "183769058")
-
-        val httpEntity = HttpEntity<MultiValueMap<String, String>>(headers)
-
-        val restTemplate = RestTemplateBuilder().build()
-
-        val boletoResponse: RespostaBoletoInter = restTemplate.getForObject(
-            "https://a6b8b4c8-036f-4a5e-9981-28ab9a0564d7.mock.pstmn.io/openbanking/v1/certificado/boletos/$boletoId",
+        val boletoResponse = restClientService.get(
+            "${urlBase}/boletos/$boletoId",
             RespostaBoletoInter::class.java,
-            httpEntity
-        ) ?: throw IllegalArgumentException("Illegal state")
-
-        val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-
-        val descontos: MutableCollection<Desconto> = mutableSetOf()
-        if ("NAOTEMDESCONTO" != boletoResponse.desconto1.codigo) {
-            descontos.add(
-                Desconto(
-                    tipo = TipoDescontoEnum.PERCENTUAL_DATA_INFORMADA,
-                    data = LocalDate.now(),
-                    taxa = boletoResponse.desconto1.taxa.toBigDecimal(),
-                    valor = boletoResponse.desconto1.valor.toBigDecimal()
-                )
-            )
-        }
-
-        if ("NAOTEMDESCONTO" != boletoResponse.desconto2.codigo) {
-            descontos.add(
-                Desconto(
-                    tipo = TipoDescontoEnum.PERCENTUAL_DATA_INFORMADA,
-                    data = LocalDate.now(),
-                    taxa = boletoResponse.desconto2.taxa.toBigDecimal(),
-                    valor = boletoResponse.desconto2.valor.toBigDecimal()
-                )
-            )
-        }
-
-        if ("NAOTEMDESCONTO" != boletoResponse.desconto3.codigo) {
-            descontos.add(
-                Desconto(
-                    tipo = TipoDescontoEnum.PERCENTUAL_DATA_INFORMADA,
-                    data = LocalDate.now(),
-                    taxa = boletoResponse.desconto3.taxa.toBigDecimal(),
-                    valor = boletoResponse.desconto3.valor.toBigDecimal()
-                )
-            )
-        }
-
-        val mensagens: MutableCollection<String> = mutableListOf()
-        if (boletoResponse.mensagem.linha1.isNotBlank()) {
-            mensagens.add(boletoResponse.mensagem.linha1)
-        }
-        if (boletoResponse.mensagem.linha2.isNotBlank()) {
-            mensagens.add(boletoResponse.mensagem.linha2)
-        }
-        if (boletoResponse.mensagem.linha3.isNotBlank()) {
-            mensagens.add(boletoResponse.mensagem.linha3)
-        }
-        if (boletoResponse.mensagem.linha4.isNotBlank()) {
-            mensagens.add(boletoResponse.mensagem.linha4)
-        }
-        if (boletoResponse.mensagem.linha5.isNotBlank()) {
-            mensagens.add(boletoResponse.mensagem.linha5)
-        }
+            httpEntity,
+            emptyMap()
+        )
 
         return boletoResponse.let {
-            Boleto(
-                seuNumero = it.seuNumero.toInt(),
-                valor = it.valorNominal.toBigDecimal(),
-                dataEmissao = LocalDate.parse(it.dataEmissao, dateFormatter),
-                dataVencimento = LocalDate.parse(it.dataVencimento, dateFormatter),
-                nossoNumero = boletoId,
-                codigoBarras = it.codigoBarras,
-                linhaDigitavel = it.linhaDigitavel,
-                status = StatusEnum.valueOf(it.situacao),
-                motivoBaixa = StringUtils.capitalize(it.situacao),
-                beneficiario = Beneficiario(
-                    nome = it.nomeBeneficiario,
-                    cnpj = it.cnpjCpfBeneficiario
-                ),
-                pagador = Pagador(
-                    tipoPessoa = if ("FISICA" == it.tipoPessoaPagador) TipoPessoaEnum.PESSOA_FISICA else TipoPessoaEnum.PESSOA_JURIDICA,
-                    nome = it.nomePagador,
-                    documento = it.cnpjCpfPagador.toLong(),
-                    email = it.emailPagador,
-                    endereco = Endereco( //TODO: Consultar e preencher endereço
-                        logradouro = "",
-                        numero = 0,
-                        bairro = "",
-                        complemento = "",
-                        cidade = "",
-                        uf = "",
-                        cep = ""
-                    ),
-                    telefone = Telefone(
-                        ddd = it.dddPagador.toInt(),
-                        numero = it.telefonePagador.toInt()
-                    )
-                ),
-                descontos = descontos.toSet(),
-                mora = Mora(
-                    tipo = TipoMoraEnum.TAXA_MENSAL,
-                    data = it.mora.data,
-                    taxa = it.mora.taxa.toBigDecimal(),
-                    valor = it.mora.valor.toBigDecimal()
-                ),
-                multa = Multa(
-                    tipo = TipoMultaEnum.PERCENTUAL,
-                    data = it.multa.data,
-                    taxa = it.multa.taxa.toBigDecimal(),
-                    valor = it.multa.valor.toBigDecimal()
-                ),
-                mensagens = mensagens.toSet()
-            )
+            parseBoleto(it, boletoId)
+        }
+    }
+
+    private fun parseBoleto(
+        boletoResponse: RespostaBoletoInter,
+        boletoId: String
+    ): Boleto {
+        val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+
+        return Boleto(
+            seuNumero = boletoResponse.seuNumero.toInt(),
+            valor = boletoResponse.valorNominal.toBigDecimal(),
+            dataEmissao = LocalDate.parse(boletoResponse.dataEmissao, dateFormatter),
+            dataVencimento = LocalDate.parse(boletoResponse.dataVencimento, dateFormatter),
+            nossoNumero = boletoId,
+            codigoBarras = boletoResponse.codigoBarras,
+            linhaDigitavel = boletoResponse.linhaDigitavel,
+            status = StatusEnum.valueOf(boletoResponse.situacao),
+            motivoBaixa = boletoResponse.situacao,
+            beneficiario = parseBeneficiario(boletoResponse),
+            pagador = parsePagador(boletoResponse),
+            descontos = parseDescontos(boletoResponse),
+            mora = parseMora(boletoResponse),
+            multa = parseMulta(boletoResponse),
+            mensagens = parseMensagens(boletoResponse.mensagem)
+        )
+    }
+
+    private fun parseBeneficiario(it: RespostaBoletoInter) = Beneficiario(
+        nome = it.nomeBeneficiario,
+        cnpj = it.cnpjCpfBeneficiario
+    )
+
+    private fun parsePagador(it: RespostaBoletoInter) = Pagador(
+        tipoPessoa = if ("FISICA" == it.tipoPessoaPagador) TipoPessoaEnum.PESSOA_FISICA else TipoPessoaEnum.PESSOA_JURIDICA,
+        nome = it.nomePagador,
+        documento = it.cnpjCpfPagador.toLong(),
+        email = it.emailPagador,
+        endereco = parseEndereco(),
+        telefone = parseTelefone(it)
+    )
+
+    private fun parseEndereco() = Endereco( //TODO: Consultar e preencher endereço
+        logradouro = "",
+        numero = 0,
+        bairro = "",
+        complemento = "",
+        cidade = "",
+        uf = "",
+        cep = ""
+    )
+
+    private fun parseTelefone(it: RespostaBoletoInter) = Telefone(
+        ddd = it.dddPagador.toInt(),
+        numero = it.telefonePagador.toInt()
+    )
+
+    private fun parseMora(it: RespostaBoletoInter) = Mora(
+        tipo = TipoMoraEnum.TAXA_MENSAL,
+        data = it.mora.data,
+        taxa = it.mora.taxa.toBigDecimal(),
+        valor = it.mora.valor.toBigDecimal()
+    )
+
+    private fun parseMulta(it: RespostaBoletoInter) = Multa(
+        tipo = TipoMultaEnum.PERCENTUAL,
+        data = it.multa.data,
+        taxa = it.multa.taxa.toBigDecimal(),
+        valor = it.multa.valor.toBigDecimal()
+    )
+
+    private fun parseMensagens(mensagemResponse: RespostaMensagemInter): Collection<String> {
+        val mensagens: MutableCollection<String> = mutableListOf()
+
+        if (mensagemResponse.linha1.isNotBlank()) {
+            mensagens.add(mensagemResponse.linha1)
+        }
+
+        if (mensagemResponse.linha2.isNotBlank()) {
+            mensagens.add(mensagemResponse.linha2)
+        }
+
+        if (mensagemResponse.linha3.isNotBlank()) {
+            mensagens.add(mensagemResponse.linha3)
+        }
+
+        if (mensagemResponse.linha4.isNotBlank()) {
+            mensagens.add(mensagemResponse.linha4)
+        }
+
+        if (mensagemResponse.linha5.isNotBlank()) {
+            mensagens.add(mensagemResponse.linha5)
+        }
+
+        return mensagens.toList()
+    }
+
+    private fun parseDescontos(boletoResponse: RespostaBoletoInter): Collection<Desconto> {
+        val descontos: MutableCollection<Desconto> = mutableSetOf()
+        if (this.temDesconto(boletoResponse.desconto1)) {
+            descontos.add(parseDesconto(boletoResponse.desconto1))
+        }
+
+        if (this.temDesconto(boletoResponse.desconto2)) {
+            descontos.add(parseDesconto(boletoResponse.desconto2))
+        }
+
+        if (this.temDesconto(boletoResponse.desconto3)) {
+            descontos.add(parseDesconto(boletoResponse.desconto3))
+        }
+
+        return descontos.toSet()
+    }
+
+    private fun temDesconto(descontoResponse: RespostaDescontoInter): Boolean {
+        return "NAOTEMDESCONTO" != descontoResponse.codigo
+    }
+
+    private fun parseDesconto(descontoResponse: RespostaDescontoInter): Desconto {
+        return Desconto(
+            tipo = parseTipoDesconto(descontoResponse.codigo),
+            data = descontoResponse.data ?: LocalDate.now(),
+            taxa = descontoResponse.taxa.toBigDecimal(),
+            valor = descontoResponse.valor.toBigDecimal()
+        )
+    }
+
+    private fun parseTipoDesconto(tipoDesconto: String): TipoDescontoEnum {
+        return when (tipoDesconto) {
+            "PERCENTUALDATAINFORMADA" -> TipoDescontoEnum.PERCENTUAL_DATA_INFORMADA
+            "VALORFIXODATAINFORMADA" -> TipoDescontoEnum.VALOR_FIXO_DATA_INFORMADA
+            "VALORANTECIPACAODIACORRIDO" -> TipoDescontoEnum.VALOR_ANTECIPACAO_DIA_CORRIDO
+            "VALORANTECIPACAODIAUTIL" -> TipoDescontoEnum.VALOR_ANTECIPACAO_DIA_UTIL
+            else -> {
+                throw RuntimeException()
+            }
         }
     }
 
@@ -154,5 +191,12 @@ class BoletoInterService : BoletoService {
 
     override fun baixarBoleto(boletoId: String, motivoBaixa: String): Boleto {
         TODO("Not yet implemented")
+    }
+
+    private fun recuperarHttpEntity(): HttpEntity<Any> {
+        val headers = HttpHeaders()
+        headers.add("x-inter-conta-corrente", this.numeroConta)
+
+        return HttpEntity<Any>(headers)
     }
 }

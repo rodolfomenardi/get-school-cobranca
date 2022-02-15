@@ -2,25 +2,18 @@ package online.getschool.cobranca.integracao.banco.inter.service
 
 import online.getschool.cobranca.dominio.dto.boleto.*
 import online.getschool.cobranca.integracao.banco.BoletoService
+import online.getschool.cobranca.integracao.banco.inter.adapter.ApiBoletoInterAdapter
 import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaBoletoInter
 import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaDescontoInter
 import online.getschool.cobranca.integracao.banco.inter.dto.resposta.RespostaMensagemInter
-import online.getschool.cobranca.services.RestClientService
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Service
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @Service
-class BoletoInterService(
-    @Value("\${banco.inter.url.rest}") private val urlBase: String,
-    @Value("\${banco.inter.numero.conta}") private val numeroConta: String,
-    private val restClientService: RestClientService
-) : BoletoService {
+class BoletoInterService(private val apiBoletoInterAdapter: ApiBoletoInterAdapter) : BoletoService {
     companion object {
         private val logger = LoggerFactory.getLogger(BoletoInterService::class.java)
     }
@@ -35,15 +28,8 @@ class BoletoInterService(
 
     override fun recuperarBoleto(boletoId: String): Boleto {
         logger.debug("Recuperando boletos do banco inter")
-        val httpEntity = this.recuperarHttpEntity()
 
-        val boletoResponse = restClientService.get(
-            "${urlBase}/boletos/$boletoId",
-            RespostaBoletoInter::class.java,
-            httpEntity,
-            emptyMap()
-        )
-
+        val boletoResponse = apiBoletoInterAdapter.recuperarBoleto(boletoId)
         return boletoResponse.let {
             parseBoleto(it, boletoId)
         }
@@ -104,14 +90,14 @@ class BoletoInterService(
     )
 
     private fun parseMora(it: RespostaBoletoInter) = Mora(
-        tipo = TipoMoraEnum.TAXA_MENSAL,
+        tipo = TipoMoraEnum.TAXA_MENSAL, //TODO: Ajustar o parse do tipo
         data = it.mora.data,
         taxa = it.mora.taxa.toBigDecimal(),
         valor = it.mora.valor.toBigDecimal()
     )
 
     private fun parseMulta(it: RespostaBoletoInter) = Multa(
-        tipo = TipoMultaEnum.PERCENTUAL,
+        tipo = TipoMultaEnum.PERCENTUAL, //TODO: Ajustar o parser do tipo
         data = it.multa.data,
         taxa = it.multa.taxa.toBigDecimal(),
         valor = it.multa.valor.toBigDecimal()
@@ -191,12 +177,5 @@ class BoletoInterService(
 
     override fun baixarBoleto(boletoId: String, motivoBaixa: String): Boleto {
         TODO("Not yet implemented")
-    }
-
-    private fun recuperarHttpEntity(): HttpEntity<Any> {
-        val headers = HttpHeaders()
-        headers.add("x-inter-conta-corrente", this.numeroConta)
-
-        return HttpEntity<Any>(headers)
     }
 }

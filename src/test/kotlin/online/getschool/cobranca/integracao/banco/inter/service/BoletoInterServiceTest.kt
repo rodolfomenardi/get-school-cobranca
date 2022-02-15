@@ -6,12 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 
 @SpringBootTest
-internal class BoletoInterServiceTest {
-    lateinit var boletoService: BoletoService
-    @Autowired
-    fun BoletoInterServiceTest(boletoService: BoletoService) {
-        this.boletoService = boletoService
-    }
+internal class BoletoInterServiceTest(@Autowired private val boletoService: BoletoService) {
     @Test
     fun deveRecuperarBoletoDadoIdValido() {
         val boletoId = "00779818998"

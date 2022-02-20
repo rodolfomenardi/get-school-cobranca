@@ -9,5 +9,4 @@ class GetSchoolCobrancaApplicationTests {
 	@Test
 	fun contextLoads() {
 	}
-
 }

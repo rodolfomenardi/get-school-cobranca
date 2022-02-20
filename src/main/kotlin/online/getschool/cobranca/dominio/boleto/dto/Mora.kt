@@ -1,0 +1,35 @@
+package online.getschool.cobranca.dominio.boleto.dto
+
+import java.math.BigDecimal
+import java.time.LocalDate
+
+open class Mora(
+    val tipo: TipoMoraEnum,
+    val data: LocalDate,
+    val taxa: BigDecimal,
+    val valor: BigDecimal
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is Mora) return false
+
+        if (tipo != other.tipo) return false
+        if (data != other.data) return false
+        if (taxa != other.taxa) return false
+        if (valor != other.valor) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = tipo.hashCode()
+        result = 31 * result + data.hashCode()
+        result = 31 * result + taxa.hashCode()
+        result = 31 * result + valor.hashCode()
+        return result
+    }
+
+    override fun toString(): String {
+        return "Mora(tipo=$tipo, data=$data, taxa=$taxa, valor=$valor)"
+    }
+}

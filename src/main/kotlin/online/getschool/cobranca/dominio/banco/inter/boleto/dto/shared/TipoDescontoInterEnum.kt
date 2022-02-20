@@ -1,0 +1,20 @@
+package online.getschool.cobranca.dominio.banco.inter.boleto.dto.shared
+
+import com.fasterxml.jackson.annotation.JsonAlias
+
+enum class TipoDescontoInterEnum {
+    @JsonAlias("NAOTEMDESCONTO")
+    NAO_TEM_DESCONTO,
+    @JsonAlias("VALORFIXODATAINFORMADA")
+    VALOR_FIXO_DATA_INFORMADA,
+    @JsonAlias("PERCENTUALDATAINFORMADA")
+    PERCENTUAL_DATA_INFORMADA,
+    @JsonAlias("VALORANTECIPACAODIACORRIDO")
+    VALOR_ANTECIPACAO_DIA_CORRIDO,
+    @JsonAlias("VALORANTECIPACAODIAUTIL")
+    VALOR_ANTECIPACAO_DIA_UTIL,
+    @JsonAlias("PERCENTUALVALORNOMINALDIACORRIDO")
+    PERCENTUAL_VALOR_NOMINAL_DIA_CORRIDO,
+    @JsonAlias("PERCENTUALVALORNOMINALDIAUTIL")
+    PERCENTUAL_VALOR_NOMINAL_DIA_UTIL
+}
